@@ -1,0 +1,16 @@
+{
+  "require": {
+    "php": "^8.2",
+    "ext-pdo": "*",
+    "phpmailer/phpmailer": "^6.9",
+    "google/apiclient": "^2.18"
+  },
+  "scripts": {
+    "test": "php tests/security.php"
+  },
+  "config": {
+    "platform": {
+      "php": "8.3.0"
+    }
+  }
+}

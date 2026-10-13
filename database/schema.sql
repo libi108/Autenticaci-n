@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS usuarios (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ email VARCHAR(254) NOT NULL UNIQUE,
+ password_hash VARCHAR(255) NULL,
+ telefono VARCHAR(20) NULL,
+ google_id VARCHAR(255) NULL UNIQUE,
+ codigo_verificacion VARCHAR(128) NULL,
+ codigo_expiracion DATETIME NULL,
+ codigo_proposito VARCHAR(20) NULL,
+ codigo_intentos INT NOT NULL DEFAULT 0,
+ ultimo_envio DATETIME NULL,
+ cuenta_activa BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE TABLE IF NOT EXISTS limites (
+ clave CHAR(64) PRIMARY KEY,
+ intentos INT NOT NULL,
+ ventana DATETIME NOT NULL
+);
