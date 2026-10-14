@@ -7,118 +7,145 @@ Fatima Flores Santos – 202335555
 
 ## 1. Introducción
 
-El presente reporte documenta la implementación y prueba de una aplicación de autenticación de dos pasos desarrollada con PHP, MariaDB y PHPMailer. La práctica incluye registro local, establecimiento de contraseña después de verificar el correo, inicio de sesión con contraseña y código temporal, recuperación de contraseña e integración de acceso federado mediante Google OAuth 2.0.
+El presente reporte documenta la implementación y los resultados de una aplicación de autenticación desarrollada con PHP, MariaDB, PHPMailer y Google OAuth 2.0. Se implementaron dos formas de acceso: autenticación local mediante contraseña y código temporal por correo, y autenticación federada mediante una cuenta Google.
 
-El objetivo es comprobar el flujo funcional y analizar sus límites frente a ingeniería social. Las evidencias entregadas por el equipo muestran el registro, la recepción de mensajes en Mailpit, los formularios de validación y una sesión autenticada. Mailpit es un buzón SMTP de laboratorio: recibir allí un mensaje no demuestra su entrega a Gmail u otro proveedor externo.
-
-
-## 2. Alcance de la Práctica y Manejo de Información
-
-Las pruebas se realizaron en una aplicación de laboratorio accesible en localhost:8000, con un buzón local en localhost:8025. Se eligió el canal de correo electrónico; SMS y WhatsApp no se implementaron. El análisis de phishing, SIM swapping y fatiga de notificaciones es conceptual y defensivo; no se realizó una campaña de interceptación de credenciales.
-
-La configuración se conserva en .env, excluido del repositorio. El archivo .env.example contiene nombres de variables y valores de ejemplo. Las contraseñas locales se almacenan con bcrypt; los códigos temporales se almacenan mediante un hash SHA-256. No deben incorporarse contraseñas ni secretos OAuth a las evidencias del reporte.
-
-Se distinguen los resultados observados en las capturas del equipo, las comprobaciones automatizadas realizadas previamente y los componentes pendientes de validación externa. La presencia del botón Google no acredita un acceso OAuth exitoso.
+El objetivo de la práctica fue integrar un mecanismo funcional de verificación por correo, gestionar contraseñas mediante hash, incorporar el acceso Google y analizar los riesgos de ingeniería social asociados a estos métodos. Las evidencias muestran el registro, la recepción de códigos, su introducción en la aplicación y el acceso al área protegida mediante ambos flujos.
 
 
-## 3. Evidencias del Flujo de Autenticación
+## 2. Arquitectura y Descripción del Flujo
 
 
-### 3.1 Registro de la cuenta
+### 2.1 Componentes del sistema
 
-La captura del formulario de registro muestra el correo introducido y el mensaje: «Si la cuenta permite el registro, recibirás un código». Esta respuesta inicia el proceso de comprobación del correo; todavía no concede acceso al área protegida.
+Docker Compose ejecuta la aplicación PHP 8.3, MariaDB 11.4 y Mailpit. PDO conecta PHP con la base de datos mediante consultas preparadas. PHPMailer entrega los mensajes al servidor SMTP local Mailpit, cuya interfaz permite consultar los códigos de la práctica. El cliente Google gestiona el intercambio OAuth y verifica la identidad antes de crear la sesión.
+
+
+### 2.2 Diferencia entre los dos métodos de acceso
+
+En el acceso local, la aplicación comprueba una contraseña propia y exige después un código temporal enviado por correo. En el acceso federado, Google autentica al usuario y devuelve a la aplicación una identidad verificada. No se crea una contraseña local ni se envía un código adicional desde la aplicación para ese flujo. Si Google ya tiene una sesión válida, puede reconocer al usuario sin pedirle de nuevo su contraseña; las pantallas de Google dependen del estado y de la configuración de su cuenta.
+
+Esta distinción permite interpretar las evidencias: el aviso de Google sobre información compartida corresponde a autorización del acceso federado; el correo de PHPMailer contiene el OTP del flujo local. La sesión autenticada es el resultado final de ambos caminos, pero la comprobación local de dos pasos se demuestra con contraseña y OTP.
+
+
+## 3. Evidencias del Registro y Acceso Local
+
+
+### 3.1 Solicitud de registro
+
+El usuario escribe su correo en Crear o recuperar cuenta y pulsa Registrarme. La aplicación muestra el aviso de envío y comienza la verificación del correo antes de permitir establecer una contraseña.
 
 ![Figura 1](evidencias/evidencia_7.png)
 
-Figura 1. Registro de la cuenta.
+Figura 1. Solicitud de registro.
 
 
-### 3.2 Recepción del código en Mailpit
+### 3.2 Recepción del mensaje con el código
 
-La captura del buzón muestra mensajes con asunto «Código de verificación», remitente no-reply@example.test y un código de seis dígitos. El cuerpo informa que caduca en diez minutos y que no debe compartirse. La recepción documenta envío SMTP local, no entrega a una bandeja Gmail.
+El buzón Mailpit muestra el correo generado por PHPMailer, con asunto Código de verificación y un código de seis dígitos. El mensaje señala una duración de diez minutos y recomienda no compartirlo. Mailpit funciona como receptor SMTP local para observar el envío durante el laboratorio.
 
 ![Figura 2](evidencias/evidencia_4.png)
 
-Figura 2. Recepción del código en Mailpit.
+Figura 2. Recepción del mensaje con el código.
 
 
-## 3. Evidencias del Flujo de Autenticación (continuación)
+## 3. Evidencias del Registro y Acceso Local (continuación)
 
 
 ### 3.3 Verificación y establecimiento de contraseña
 
-La captura muestra «Verifica tu correo», el campo de código y el campo «Nueva contraseña (12–72 bytes)» con el valor oculto. El botón «Verificar y continuar» envía los datos al backend. Esta imagen acredita el formulario rellenado; por sí sola no muestra el hash almacenado en la base de datos.
+En Verifica tu correo se introduce el código recibido y una nueva contraseña. Al pulsar Verificar y continuar, el backend valida el código y guarda la contraseña con password_hash y PASSWORD_BCRYPT. De esta manera, la contraseña se establece después de comprobar el acceso al canal de correo.
 
 ![Figura 3](evidencias/evidencia_8.png)
 
 Figura 3. Verificación y establecimiento de contraseña.
 
 
-### 3.4 Solicitud del segundo factor después de la contraseña
+### 3.4 Inicio de sesión y solicitud del segundo factor
 
-La captura completa de la aplicación muestra el aviso «Introduce el código enviado a tu correo para completar el acceso» y el formulario de verificación. En este punto se ha solicitado el segundo factor y aún no se presenta el área protegida.
+Una vez creada la cuenta, el usuario introduce correo y contraseña en Iniciar sesión. La aplicación comprueba la credencial y muestra Introduce el código enviado a tu correo para completar el acceso. El inicio de sesión queda condicionado a la segunda verificación.
 
 ![Figura 4](evidencias/evidencia_5.png)
 
-Figura 4. Solicitud del segundo factor después de la contraseña.
+Figura 4. Inicio de sesión y solicitud del segundo factor.
 
 
-## 3. Evidencias del Flujo de Autenticación (continuación)
+## 3. Evidencias del Registro y Acceso Local (continuación)
 
 
-### 3.5 Introducción del código de acceso
+### 3.5 Validación del código de inicio de sesión
 
-La captura muestra el formulario de código de seis dígitos sin el campo de nueva contraseña, correspondiente al segundo factor de inicio de sesión. Se informa una vigencia de diez minutos y un máximo de cinco intentos.
+El usuario introduce el nuevo código en el formulario de verificación. Este formulario ya no incluye una nueva contraseña, porque corresponde al segundo paso de acceso a una cuenta existente. El código se valida en el backend y se consume para impedir su reutilización.
 
 ![Figura 5](evidencias/evidencia_6.png)
 
-Figura 5. Introducción del código de acceso.
+Figura 5. Validación del código de inicio de sesión.
 
 
-### 3.6 Sesión autenticada
+### 3.6 Acceso completado en dos pasos
 
-La captura final muestra «Acceso completado con dos pasos», «Sesión autenticada» y «Has ingresado al área protegida», además del botón para cerrar sesión. Es la evidencia visual del acceso local completado.
+La aplicación muestra Acceso completado con dos pasos y Sesión autenticada. El usuario llega al área protegida y dispone de Cerrar sesión. La secuencia de las figuras documenta el resultado del acceso local con contraseña y código temporal.
 
 ![Figura 6](evidencias/evidencia_3.png)
 
-Figura 6. Sesión autenticada.
+Figura 6. Acceso completado en dos pasos.
 
 
-## 3. Evidencias del Flujo de Autenticación (continuación)
+## 4. Evidencias del Acceso Federado con Google
 
 
-### 3.7 Incidencia de SMTP y corrección aplicada
+### 4.1 Autenticación de la cuenta Google
 
-La captura inicial muestra «No se pudo enviar el correo. Revisa la configuración SMTP». Se corrigió la configuración de Mailpit retirando usuario y contraseña, porque el servidor local de pruebas se usa sin autenticación y sin TLS. Las capturas posteriores del buzón y de la sesión documentan la continuidad del flujo después de la corrección.
+El acceso se inicia desde el botón Iniciar sesión con Google. La captura muestra una pantalla de Google para autenticar la cuenta seleccionada. Las credenciales de Google se introducen en el proveedor, no en el formulario local de la aplicación.
 
-![Figura 7](evidencias/evidencia_1.png)
+![Figura 7](evidencias/evidencia_9.png)
 
-Figura 7. Incidencia de SMTP y corrección aplicada.
-
-
-### 3.8 Configuración del buzón local utilizada
-
-```
-SMTP_HOST=mail
-SMTP_PORT=1025
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_ENCRYPTION=none
-SMTP_FROM=no-reply@example.test
-```
-
-La opción sin TLS está restringida por el código a servidores locales y sin credenciales. Para un proveedor SMTP externo se debe utilizar STARTTLS o SMTPS, credenciales del proveedor y verificación de certificados.
+Figura 7. Autenticación de la cuenta Google.
 
 
-## 4. Evidencias Técnicas del Sistema
+### 4.2 Consentimiento e información compartida
+
+Google muestra la aplicación Autenticación 2paso y la información de perfil solicitada. El usuario autoriza el acceso mediante Continuar. Esta pantalla corresponde al consentimiento para compartir la identidad con la aplicación.
+
+![Figura 8](evidencias/evidencia_10.png)
+
+Figura 8. Consentimiento e información compartida.
 
 
-### 4.1 Arquitectura y flujo
-
-Docker Compose ejecuta tres servicios: la aplicación PHP 8.3, MariaDB 11.4 y Mailpit. La aplicación recibe formularios HTTP, consulta la base de datos mediante PDO y envía códigos con PHPMailer. El flujo Google redirige al proveedor, canjea el código OAuth en el backend y verifica el ID token antes de iniciar sesión.
+## 4. Evidencias del Acceso Federado con Google (continuación)
 
 
-### 4.2 Estructura de la tabla usuarios
+### 4.3 Aviso de Google sobre la autorización
+
+El correo informa que Autenticación 2paso recibió la dirección de correo del usuario y permite revisar o retirar el acceso desde la cuenta Google. Es una notificación del proveedor sobre información compartida, no un código OTP. La autorización forma parte del flujo federado.
+
+![Figura 9](evidencias/evidencia_12.jpeg)
+
+Figura 9. Aviso de Google sobre la autorización.
+
+
+## 4. Evidencias del Acceso Federado con Google (continuación)
+
+
+### 4.4 Regreso a la aplicación y sesión autenticada
+
+Después de la autorización, el navegador regresa a la aplicación y muestra Sesión autenticada y Has ingresado al área protegida. En conjunto con las pantallas de autenticación y consentimiento, esta captura documenta el acceso Google completado. No se solicita contraseña local porque la identidad fue comprobada por el proveedor.
+
+![Figura 10](evidencias/evidencia_11.png)
+
+Figura 10. Regreso a la aplicación y sesión autenticada.
+
+
+### 4.5 Funcionamiento del callback
+
+La dirección de regreso del laboratorio es http://localhost:8000/callback.php. El backend comprueba el parámetro state asociado a la sesión, canjea el código de autorización y verifica el ID token de Google, incluido el correo verificado. Registra el identificador google_id y establece una sesión. El código de autorización es un dato del protocolo intercambiado entre el backend y Google, no un código que el usuario deba copiar del correo.
+
+El acceso federado exitoso demuestra la integración OAuth. La exigencia de MFA por parte de Google depende de la configuración de la cuenta y no debe confundirse con el OTP local de la aplicación.
+
+
+## 5. Implementación Técnica y Resultados
+
+
+### 5.1 Estructura de la base de datos
 
 ```
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -136,87 +163,64 @@ CREATE TABLE IF NOT EXISTS usuarios (
 );
 ```
 
-La tabla limites registra contadores por IP y correo en ventanas de quince minutos. codigo_proposito evita intercambiar códigos de registro, recuperación y acceso. ultimo_envio limita las emisiones para una misma cuenta a una por minuto.
+email identifica la cuenta; password_hash almacena la contraseña local y puede ser nulo en cuentas Google; google_id identifica al usuario federado. Los campos de código registran hash, vencimiento, propósito e intentos. cuenta_activa representa el estado de la cuenta. La tabla adicional limites mantiene contadores persistentes por IP y correo.
 
 
-## 4. Evidencias Técnicas del Sistema (continuación)
-
-
-### 4.3 Generación, expiración y consumo del código
+### 5.2 Protección de códigos y contraseñas
 
 ```
 $code = (string) random_int(100000, 999999);
-$hash = hash('sha256', $code);
-// Se guarda el hash; expiración: UTC_TIMESTAMP() + 10 minutos.
-// Se validan formato, propósito, expiración y menos de 5 intentos.
-// SELECT ... FOR UPDATE protege el consumo transaccional.
-// Al aceptar: codigo_verificacion y codigo_expiracion = NULL.
+$codeHash = hash('sha256', $code);
+$passwordHash = password_hash($password, PASSWORD_BCRYPT);
+$correct = password_verify($password, $passwordHash);
 ```
 
-El código solo se acepta mientras está vigente y con menos de cinco fallos. El backend usa hash_equals para comparar el hash. La caducidad y consumo reducen la reutilización, aunque los seis dígitos tienen baja entropía y requieren límites de intentos y protección de la base de datos.
+La implementación genera códigos mediante un generador criptográficamente seguro, aplica una vigencia de diez minutos y admite como máximo cinco intentos fallidos. Se compara el hash en el backend y se consume el código dentro de una transacción. La contraseña local se almacena como hash bcrypt, no como texto plano. La sesión se regenera al completar la autenticación.
 
 
-### 4.4 Gestión de contraseñas y sesiones
-
-```
-$hash = password_hash($password, PASSWORD_BCRYPT);
-$ok = password_verify($password, $hash);
-session_regenerate_id(true);
-```
-
-El hash de contraseña no es cifrado reversible. Se requieren entre doce y setenta y dos bytes para evitar el truncamiento de bcrypt. La validación del código precede al alta o cambio de contraseña. Se emplean consultas preparadas, formularios con CSRF, cookies HttpOnly y SameSite, y Secure cuando APP_URL utiliza HTTPS.
+## 5. Implementación Técnica y Resultados (continuación)
 
 
-### 4.5 Google OAuth 2.0
+### 5.3 Resumen de resultados obtenidos
 
-Se configura un cliente web en GCP y se autoriza la redirección exacta http://localhost:8000/callback.php para el laboratorio. El backend valida state de uso único con caducidad, el ID token y el correo verificado. Guarda google_id y admite una contraseña local nula para cuentas federadas. No vincula automáticamente una cuenta local existente por coincidencia de correo.
-
-No se aportó captura de consentimiento, de la configuración GCP ni de un acceso Google completado. Estos puntos quedan pendientes de evidencia. La autenticación federada tampoco prueba por sí sola que Google haya exigido un segundo factor al usuario.
+Los resultados documentados muestran que el mecanismo local exige sus dos verificaciones y que el acceso federado crea una sesión a partir de la identidad Google. El correo de autorización de Google y el OTP local tienen funciones diferentes y se observan por separado en las evidencias.
 
 
-### 4.6 Código fuente
+### 5.4 Código fuente
 
-Repositorio: https://github.com/libi108/Autenticaci-n. Archivos clave: src/security.php, src/bootstrap.php, public/index.php, public/callback.php y database/schema.sql.
-
-
-## 5. Resultados y Validación
-
-Las capturas del equipo documentan el recorrido manual local desde la solicitud de registro hasta la sesión autenticada. No permiten confirmar visualmente el almacenamiento bcrypt, la recuperación de contraseña ni el acceso federado. Por separado, la validación automatizada previa del entorno completó once comprobaciones de seguridad y dieciocho comprobaciones funcionales HTTP, base de datos y correo local.
+Repositorio: https://github.com/libi108/Autenticaci-n. Los archivos principales son src/security.php para códigos y validación, src/bootstrap.php para PHPMailer, PDO y cliente Google, public/index.php para los formularios y el acceso local, public/callback.php para OAuth y database/schema.sql para la persistencia.
 
 
-### 5.1 Límites y pendientes
-
-Los correos visibles fueron capturados por Mailpit. Se requiere una prueba independiente para demostrar entrega SMTP externa. También se necesitan capturas del hash bcrypt en MariaDB, de la recuperación y del acceso Google. No se presenta esta práctica como una solución de producción ni como una demostración de resistencia al phishing.
+## 6. Análisis de Ingeniería Social
 
 
-## 6. Análisis de Ingeniería Social y Mitigación
+### 6.1 Phishing con proxy inverso
+
+Un portal falso puede retransmitir en tiempo real el flujo del servicio legítimo y utilizar la contraseña y el OTP mientras estén vigentes. Una sesión robada después de MFA puede actuar como credencial de portador. La vigencia corta y el consumo único reducen reutilización, pero no impiden la retransmisión inmediata. HTTPS protege la conexión con el dominio visitado; el usuario debe comprobar que ese dominio sea el esperado. WebAuthn/FIDO2 ofrece resistencia al phishing mediante credenciales vinculadas al origen.
 
 
-### 6.1 Phishing mediante proxy inverso
+### 6.2 SIM swapping y canales móviles
 
-Un portal falso puede retransmitir en tiempo real la interacción con el servicio legítimo. Si la víctima entrega contraseña y OTP al intermediario, este puede usarlos durante su vigencia. La sesión emitida tras MFA actúa como credencial de portador; su robo puede permitir suplantación mientras sea válida. HTTPS protege la conexión con el dominio visitado, pero no garantiza que sea el dominio esperado. HttpOnly mitiga lectura de cookies por JavaScript del origen, no un intermediario que participa en el flujo. El uso único no evita la retransmisión inmediata.
-
-
-### 6.2 SIM swapping y OTP por SMS o WhatsApp
-
-Una transferencia fraudulenta de número puede dirigir SMS al atacante y afectar la recuperación de cuentas ligada al teléfono. WhatsApp tiene riesgos distintos: registro o recuperación del número, dispositivos vinculados comprometidos y robo de sesión. Un cambio de SIM no garantiza por sí solo acceso a todo el historial. WebAuthn/FIDO2 utiliza claves asimétricas ligadas al servicio y al origen; un dominio falso no puede solicitar una firma válida para el origen legítimo. Los procesos de recuperación deben conservar esa protección.
+Una transferencia fraudulenta del número puede redirigir SMS y afectar la recuperación de cuentas basada en teléfono. En WhatsApp también influyen el registro del número, los dispositivos vinculados y el robo de sesiones; no equivale simplemente a recibir todos los mensajes por SMS. WebAuthn/FIDO2 utiliza claves asimétricas asociadas al servicio y no transmite un OTP reutilizable. Su recuperación debe mantener la misma protección.
 
 
 ### 6.3 Fatiga de notificaciones
 
-Las solicitudes repetidas y la presión de un supuesto soporte pueden provocar una aprobación por cansancio o confusión. Se recomienda limitar frecuencia, aportar contexto del intento y facilitar rechazo y denuncia. La coincidencia numérica mejora un simple botón de aceptación, aunque no equivale a resistencia al phishing. Esta aplicación usa introducción de OTP y límites de emisión, no notificaciones push.
+La repetición de solicitudes, la urgencia y una llamada de supuesto soporte pueden inducir una aprobación por cansancio o confusión. Limitar la frecuencia, mostrar contexto, permitir rechazo y usar coincidencia numérica reduce ese riesgo. La aplicación implementada solicita introducción de un código y limita las emisiones; las notificaciones push se analizan como un vector diferente.
 
 
-### 6.4 Recomendaciones
+### 6.4 Medidas de prevención
 
-Usuario: revisar el dominio, no compartir códigos y rechazar accesos no solicitados. Infraestructura: HTTPS, TLS para SMTP externo, protección de secretos, monitoreo y revocación de sesiones, límites en el perímetro y WebAuthn para accesos sensibles. Las medidas implementadas reducen ataques automatizados y reutilización, pero no eliminan la ingeniería social.
+Se recomienda revisar dominios, no compartir códigos, rechazar solicitudes no iniciadas y mantener segura la cuenta de correo. En el servicio, proteger secretos y sesiones, usar HTTPS, limitar intentos y emplear factores resistentes al phishing para operaciones sensibles complementa la autenticación implementada.
 
 
 ## 7. Conclusiones
 
-La evidencia visual aportada demuestra un registro con verificación de correo y un acceso local completado en dos pasos. La incidencia SMTP inicial se resolvió usando correctamente Mailpit sin credenciales. El sistema separa los propósitos del código, aplica caducidad y límites de intentos, y concede acceso únicamente después del segundo factor local o de la autenticación federada validada.
+Se logró el objetivo de la práctica: implementar una aplicación con verificación por correo, gestión de contraseñas mediante bcrypt e inicio de sesión federado con Google. Las evidencias documentan la recepción del OTP en el buzón de laboratorio, su introducción en la aplicación, el acceso local completado en dos pasos y el acceso Google hasta la sesión autenticada.
 
-Los códigos por correo agregan una barrera a la contraseña, pero pueden ser retransmitidos por phishing en tiempo real y dependen de la seguridad del buzón. La alternativa recomendada para resistencia al phishing es WebAuthn/FIDO2, acompañada de recuperación segura y capacitación del usuario. La entrega SMTP externa, las capturas del almacenamiento bcrypt y el acceso Google requieren evidencias adicionales antes de considerarse demostrados en el reporte.
+La práctica permitió comprender la diferencia entre verificación del correo durante el registro, segundo factor local al iniciar sesión y autenticación federada. Google comprueba la identidad del usuario sin exigir una contraseña propia de la aplicación; su aviso por correo informa de la autorización, mientras que el código enviado por PHPMailer pertenece al flujo local.
+
+El análisis técnico muestra que los códigos temporales y las contraseñas con hash aportan controles útiles, pero la resistencia a ingeniería social requiere además atención al dominio, protección de la sesión y factores como WebAuthn/FIDO2. El resultado es un laboratorio funcional que integra ambos métodos de acceso y permite explicar sus características con evidencias reales.
 
 
 ## 8. Referencias
