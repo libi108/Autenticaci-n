@@ -6,7 +6,10 @@
     "google/apiclient": "^2.18"
   },
   "scripts": {
-    "test": "php tests/security.php"
+    "test": [
+      "php tests/security.php",
+      "php tests/oauth_callback.php"
+    ]
   },
   "config": {
     "platform": {

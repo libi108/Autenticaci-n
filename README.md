@@ -39,3 +39,9 @@ Este es un proyecto de laboratorio. Para producción utiliza HTTPS, un servidor 
 `docs/reporte.md` contiene arquitectura, respuestas conceptuales y una lista de evidencias para completar. No inventa capturas de GCP ni resultados de SMTP externo o Google. Se incluye también `docs/reporte.pdf` como borrador. Exporta el documento actualizado a PDF después de incorporar tus evidencias reales (por ejemplo con la opción imprimir/exportar PDF de tu editor). No incluyas secretos ni códigos aún vigentes en capturas.
 
 Prueba funcional local (Python 3): `python tests/functional.py`. Usa exclusivamente la instancia de laboratorio con Mailpit; genera y elimina una cuenta propia y ajusta caducidades para probar casos negativos. Los límites persistentes pueden impedir repetirla en los siguientes quince minutos.
+
+## Diagnóstico de Google
+
+El callback muestra la etapa del fallo y una referencia. `state` indica sesión perdida, vencida o callback recargado; `configuration` indica variables OAuth ausentes; `token` indica problemas al canjear el código (credenciales o conectividad); `identity` indica verificación del ID token; `database` indica persistencia; `account_conflict` indica una cuenta incompatible ya existente. Los registros de `docker compose logs --tail=30 app` incluyen la etapa y referencia, sin tokens, secretos ni mensajes externos completos. No compartas la URL completa del callback.
+
+Después de actualizar el código: `docker compose up --build -d`. Después de modificar únicamente `.env`: `docker compose up -d --force-recreate app`. Inicia un acceso nuevo desde la página principal, sin recargar el callback.
